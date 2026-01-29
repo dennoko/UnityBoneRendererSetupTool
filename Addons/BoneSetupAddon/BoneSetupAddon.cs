@@ -6,23 +6,25 @@ namespace Hays.BoneRendererSetup.Addons
 {
     /// <summary>
     /// Bone Setup Tools Addon
-    /// L/R Sync と MA Scale Presets 機能を提供する
+    /// L/R Sync と Uniform Scale 機能を提供する
     /// </summary>
     public class BoneSetupAddon : IAddonFeature
     {
         public string DisplayName => "Bone Setup Tools";
 
         private readonly LRSyncFeature _lrSync = new LRSyncFeature();
-        private readonly MAPresetFeature _maPreset = new MAPresetFeature();
+        private readonly UniformScaleFeature _uniformScale = new UniformScaleFeature();
 
         public void OnEnable()
         {
             _lrSync.Subscribe();
+            _uniformScale.Subscribe();
         }
 
         public void OnDisable()
         {
             _lrSync.Unsubscribe();
+            _uniformScale.Unsubscribe();
         }
 
         public void OnGUI(GameObject avatar, GameObject outfit)
@@ -45,15 +47,24 @@ namespace Hays.BoneRendererSetup.Addons
                }
             }
             EditorGUILayout.EndVertical();
+
+            // Uniform Scale UI
+            EditorGUILayout.Space(5);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Uniform Scale", EditorStyles.boldLabel);
             
-            // MA Presets UI
-            EditorGUILayout.Space(10);
-            _maPreset.DrawUI(outfit);
+            _uniformScale.Enabled = EditorGUILayout.Toggle("Enable Uniform Scale", _uniformScale.Enabled);
+            
+            if (_uniformScale.Enabled)
+            {
+                EditorGUILayout.HelpBox("When enabled, changing any scale axis (X/Y/Z) will set all axes to the same value.", MessageType.Info);
+            }
+            EditorGUILayout.EndVertical();
         }
 
         public void OnSceneGUI(SceneView sceneView)
         {
-            // SceneGUI processing is handled by EditorApplication.update in LRSyncFeature
+            // SceneGUI processing is handled by EditorApplication.update
         }
     }
 }

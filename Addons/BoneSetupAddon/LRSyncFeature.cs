@@ -9,6 +9,7 @@ namespace Hays.BoneRendererSetup.Addons
     /// <summary>
     /// L/R Bone Sync機能
     /// 選択中のボーンの移動・回転・スケール変更を対になるボーンにミラーリングする
+    /// MA Scale Adjuster コンポーネントも同期する
     /// </summary>
     public class LRSyncFeature
     {
@@ -21,6 +22,9 @@ namespace Hays.BoneRendererSetup.Addons
         private Quaternion _lastLocalRot;
         private Vector3 _lastLocalScale;
         private Transform _lastTrackedTransform;
+
+        // MA Scale Adjuster Type (cached)
+        private System.Type _maScaleAdjusterType;
 
         public bool Enabled
         {
@@ -35,12 +39,19 @@ namespace Hays.BoneRendererSetup.Addons
         {
             Selection.selectionChanged += OnSelectionChanged;
             EditorApplication.update += UpdateSync;
+            CacheMAType();
         }
 
         public void Unsubscribe()
         {
             Selection.selectionChanged -= OnSelectionChanged;
             EditorApplication.update -= UpdateSync;
+        }
+
+        private void CacheMAType()
+        {
+            _maScaleAdjusterType = TypeCache.GetTypesDerivedFrom(typeof(Component))
+                .FirstOrDefault(t => t.FullName == "nadena.dev.modular_avatar.core.ModularAvatarScaleAdjuster");
         }
 
         private void OnSelectionChanged()
@@ -101,6 +112,54 @@ namespace Hays.BoneRendererSetup.Addons
                 }
                 
                 UpdateLastTransform(_currentSelection);
+            }
+
+            // MA Scale Adjuster の同期
+            SyncMAScaleAdjuster(_currentSelection, mirror);
+        }
+
+        /// <summary>
+        /// MA Scale Adjuster コンポーネントを同期する
+        /// </summary>
+        private void SyncMAScaleAdjuster(Transform source, Transform mirror)
+        {
+            if (_maScaleAdjusterType == null) return;
+
+            var sourceComponent = source.GetComponent(_maScaleAdjusterType);
+            var mirrorComponent = mirror.GetComponent(_maScaleAdjusterType);
+
+            if (sourceComponent != null)
+            {
+                // ソースにコンポーネントがある場合、ミラーにも追加/同期
+                if (mirrorComponent == null)
+                {
+                    mirrorComponent = Undo.AddComponent(mirror.gameObject, _maScaleAdjusterType);
+                }
+
+                // スケール値を同期
+                var sourceSO = new SerializedObject(sourceComponent);
+                var mirrorSO = new SerializedObject(mirrorComponent);
+
+                var sourceScale = sourceSO.FindProperty("m_Scale");
+                var mirrorScale = mirrorSO.FindProperty("m_Scale");
+
+                if (sourceScale != null && mirrorScale != null)
+                {
+                    if (mirrorScale.vector3Value != sourceScale.vector3Value)
+                    {
+                        Undo.RecordObject(mirrorComponent, "Mirror MA Scale Adjuster");
+                        mirrorSO.Update();
+                        mirrorScale.vector3Value = sourceScale.vector3Value;
+                        mirrorSO.ApplyModifiedProperties();
+                    }
+                }
+            }
+            else if (mirrorComponent != null)
+            {
+                // ソースにコンポーネントがなく、ミラーにある場合は削除（オプション）
+                // ユーザー要望は「コピーして適用」なので、ソースから削除された場合の同期は保留
+                // 必要であれば以下のコメントを解除:
+                // Undo.DestroyObjectImmediate(mirrorComponent);
             }
         }
 
@@ -164,3 +223,4 @@ namespace Hays.BoneRendererSetup.Addons
         }
     }
 }
+
