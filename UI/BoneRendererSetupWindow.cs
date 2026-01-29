@@ -14,16 +14,70 @@ namespace Hays.BoneRendererSetup.UI
     {
         private GameObject _avatar;
         private GameObject _outfit;
+        private System.Collections.Generic.List<IAddonFeature> _addons = new System.Collections.Generic.List<IAddonFeature>();
+
+        // 公開プロパティ（Addonからのアクセス用）
+        public static BoneRendererSetupWindow Instance { get; private set; }
+        public GameObject CurrentAvatar => _avatar;
+        public GameObject CurrentOutfit => _outfit;
+
 
         private Vector2 _scrollPosition;
 
-        [MenuItem("dennokoworks/BoneRendererSetupTool")]
         public static void ShowWindow()
         {
             var window = GetWindow<BoneRendererSetupWindow>();
             window.titleContent = new GUIContent("Bone Renderer Setup");
             window.minSize = new Vector2(300, 350);
             window.Show();
+        }
+
+        private void OnEnable()
+        {
+            Instance = this;
+            LoadAddons();
+            SceneView.duringSceneGui += OnSceneGUI;
+        }
+
+        private void OnDisable()
+        {
+            SceneView.duringSceneGui -= OnSceneGUI;
+            foreach (var addon in _addons)
+            {
+                addon.OnDisable();
+            }
+            if (Instance == this) Instance = null;
+        }
+
+        private void LoadAddons()
+        {
+            _addons.Clear();
+            var interfaceType = typeof(IAddonFeature);
+            var types = TypeCache.GetTypesDerivedFrom(interfaceType);
+            
+            foreach (var type in types)
+            {
+                if (type.IsAbstract || type.IsInterface) continue;
+                
+                try
+                {
+                    var addon = (IAddonFeature)System.Activator.CreateInstance(type);
+                    addon.OnEnable();
+                    _addons.Add(addon);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[BoneRendererSetup] Failed to load addon {type.Name}: {e.Message}");
+                }
+            }
+        }
+
+        private void OnSceneGUI(SceneView sceneView)
+        {
+            foreach (var addon in _addons)
+            {
+                addon.OnSceneGUI(sceneView);
+            }
         }
 
         private void OnGUI()
@@ -41,6 +95,12 @@ namespace Hays.BoneRendererSetup.UI
             EditorGUILayout.Space(15);
             
             DrawOutfitSection();
+            EditorGUILayout.Space(15);
+            
+            DrawOutfitSection();
+            EditorGUILayout.Space(15);
+            
+            DrawAddonsSection();
             EditorGUILayout.Space(15);
             
             DrawUtilitySection();
@@ -189,6 +249,21 @@ namespace Hays.BoneRendererSetup.UI
                         RemoveRenderer(_outfit);
                     }
                 }
+            }
+        }
+
+        private void DrawAddonsSection()
+        {
+            if (_addons.Count == 0) return;
+
+            EditorGUILayout.LabelField("Addons", EditorStyles.boldLabel);
+            foreach (var addon in _addons)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField(addon.DisplayName, EditorStyles.miniBoldLabel);
+                addon.OnGUI(_avatar, _outfit);
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(5);
             }
         }
 
