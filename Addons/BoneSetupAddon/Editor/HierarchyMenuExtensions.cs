@@ -42,7 +42,7 @@ namespace Hays.BoneRendererSetup.Addons
             var matches = OutfitBoneMapper.GetDetailedMatches(outfit, avatar);
             var match = matches.FirstOrDefault(m => m.OutfitBone == targetBone.transform);
 
-            if (match == null || match.AvatarBone == null)
+            if (match.OutfitBone == null || match.AvatarBone == null)
             {
                 // Fallback: Try name match directly if Mapper failed or wasn't exhaustive
                 // This is a "Partial" feature, so maybe the mapper didn't pick it up but the user wants to force it?

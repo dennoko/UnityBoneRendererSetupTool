@@ -278,3 +278,4 @@ namespace Hays.BoneRendererSetup.UI
             }
     }
 }
+}
