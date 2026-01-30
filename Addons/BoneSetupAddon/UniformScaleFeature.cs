@@ -11,7 +11,7 @@ namespace Hays.BoneRendererSetup.Addons
     /// </summary>
     public class UniformScaleFeature
     {
-        private bool _enabled = false;
+        private bool _enabled = true;
         private Transform _currentSelection;
         private Vector3 _lastLocalScale;
         private Transform _lastTrackedTransform;

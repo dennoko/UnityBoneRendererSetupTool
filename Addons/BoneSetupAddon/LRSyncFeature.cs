@@ -13,7 +13,7 @@ namespace Hays.BoneRendererSetup.Addons
     /// </summary>
     public class LRSyncFeature
     {
-        private bool _enabled = false;
+        private bool _enabled = true;
         private Transform _currentSelection;
         private Transform _cachedRoot;
         private Dictionary<Transform, Transform> _mirrorCache = new Dictionary<Transform, Transform>();
