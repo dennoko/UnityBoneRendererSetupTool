@@ -103,8 +103,7 @@ namespace Hays.BoneRendererSetup.UI
 
             if (avatars.Length == 1)
             {
-                _avatar = avatars[0];
-                Debug.Log($"[BoneRendererSetup] アバターを検出: {_avatar.name}");
+                SetAvatarAndSetup(avatars[0]);
             }
             else
             {
@@ -114,11 +113,31 @@ namespace Hays.BoneRendererSetup.UI
                     var captured = a;
                     menu.AddItem(new GUIContent(a.name), false, () =>
                     {
-                        _avatar = captured;
+                        SetAvatarAndSetup(captured);
                         Repaint();
                     });
                 }
                 menu.ShowAsContext();
+            }
+        }
+
+        /// <summary>
+        /// アバターをセットして自動Setupを実行
+        /// </summary>
+        private void SetAvatarAndSetup(GameObject newAvatar)
+        {
+            // 前のアバターからRendererを削除
+            if (_avatar != null && _avatar != newAvatar)
+            {
+                RemoveRenderer(_avatar);
+            }
+            
+            _avatar = newAvatar;
+            Debug.Log($"[BoneRendererSetup] アバターを検出: {_avatar.name}");
+            
+            if (CanSetupAvatar())
+            {
+                SetupAvatar();
             }
         }
 

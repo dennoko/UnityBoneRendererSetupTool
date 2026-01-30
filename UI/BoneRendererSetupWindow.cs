@@ -146,11 +146,34 @@ namespace Hays.BoneRendererSetup.UI
             
             using (new EditorGUILayout.HorizontalScope())
             {
-                _avatar = (GameObject)EditorGUILayout.ObjectField(
+                EditorGUI.BeginChangeCheck();
+                var newAvatar = (GameObject)EditorGUILayout.ObjectField(
                     _avatar, typeof(GameObject), true);
+                
+                if (EditorGUI.EndChangeCheck())
+                {
+                    // 入力が変更された場合
+                    if (_avatar != null && newAvatar != _avatar)
+                    {
+                        // 前のアバターからRendererを削除
+                        RemoveRenderer(_avatar);
+                    }
+                    
+                    _avatar = newAvatar;
+                    
+                    if (_avatar != null && CanSetupAvatar())
+                    {
+                        // 新しいアバターを自動Setup
+                        SetupAvatar();
+                    }
+                }
                 
                 if (GUILayout.Button("Clear", GUILayout.Width(50)))
                 {
+                    if (_avatar != null)
+                    {
+                        RemoveRenderer(_avatar);
+                    }
                     _avatar = null;
                 }
             }
@@ -179,7 +202,7 @@ namespace Hays.BoneRendererSetup.UI
             {
                 using (new EditorGUI.DisabledScope(!CanSetupAvatar()))
                 {
-                    if (GUILayout.Button("Setup Avatar", GUILayout.Height(25)))
+                    if (GUILayout.Button("Setup", GUILayout.Height(25)))
                     {
                         SetupAvatar();
                     }
@@ -201,11 +224,34 @@ namespace Hays.BoneRendererSetup.UI
             
             using (new EditorGUILayout.HorizontalScope())
             {
-                _outfit = (GameObject)EditorGUILayout.ObjectField(
+                EditorGUI.BeginChangeCheck();
+                var newOutfit = (GameObject)EditorGUILayout.ObjectField(
                     _outfit, typeof(GameObject), true);
+                
+                if (EditorGUI.EndChangeCheck())
+                {
+                    // 入力が変更された場合
+                    if (_outfit != null && newOutfit != _outfit)
+                    {
+                        // 前の衣装からRendererを削除
+                        RemoveRenderer(_outfit);
+                    }
+                    
+                    _outfit = newOutfit;
+                    
+                    if (_outfit != null && CanSetupOutfit())
+                    {
+                        // 新しい衣装を自動Setup
+                        SetupOutfit();
+                    }
+                }
                 
                 if (GUILayout.Button("Clear", GUILayout.Width(50)))
                 {
+                    if (_outfit != null)
+                    {
+                        RemoveRenderer(_outfit);
+                    }
                     _outfit = null;
                 }
             }
@@ -234,7 +280,7 @@ namespace Hays.BoneRendererSetup.UI
             {
                 using (new EditorGUI.DisabledScope(!CanSetupOutfit()))
                 {
-                    if (GUILayout.Button("Setup Outfit", GUILayout.Height(25)))
+                    if (GUILayout.Button("Setup", GUILayout.Height(25)))
                     {
                         SetupOutfit();
                     }
