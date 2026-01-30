@@ -120,6 +120,7 @@ namespace Hays.BoneRendererSetup.Addons
 
         /// <summary>
         /// MA Scale Adjuster コンポーネントを同期する
+        /// 子オブジェクトの位置も調整する
         /// </summary>
         private void SyncMAScaleAdjuster(Transform source, Transform mirror)
         {
@@ -145,11 +146,21 @@ namespace Hays.BoneRendererSetup.Addons
 
                 if (sourceScale != null && mirrorScale != null)
                 {
-                    if (mirrorScale.vector3Value != sourceScale.vector3Value)
+                    Vector3 newScale = sourceScale.vector3Value;
+                    Vector3 oldScale = mirrorScale.vector3Value;
+                    
+                    if (oldScale != newScale)
                     {
+                        // MAの設定で子オブジェクトの位置調整が有効な場合のみ調整
+                        if (IsAdjustChildPositionsEnabled())
+                        {
+                            AdjustChildPositions(mirror, oldScale, newScale);
+                        }
+                        
+                        // スケール値を更新
                         Undo.RecordObject(mirrorComponent, "Mirror MA Scale Adjuster");
                         mirrorSO.Update();
-                        mirrorScale.vector3Value = sourceScale.vector3Value;
+                        mirrorScale.vector3Value = newScale;
                         mirrorSO.ApplyModifiedProperties();
                     }
                 }
@@ -161,6 +172,57 @@ namespace Hays.BoneRendererSetup.Addons
                 // 必要であれば以下のコメントを解除:
                 // Undo.DestroyObjectImmediate(mirrorComponent);
             }
+        }
+
+        /// <summary>
+        /// スケール変更時に子オブジェクトの位置を調整する
+        /// MAのScaleAdjusterToolと同じロジック
+        /// </summary>
+        private void AdjustChildPositions(Transform target, Vector3 oldScale, Vector3 newScale)
+        {
+            const float THRESHOLD = 1f / (1 << 14); // 1/16384
+            
+            // スケールをクランプ（ゼロ除算回避）
+            oldScale = new Vector3(
+                Mathf.Max(THRESHOLD, oldScale.x),
+                Mathf.Max(THRESHOLD, oldScale.y),
+                Mathf.Max(THRESHOLD, oldScale.z)
+            );
+            newScale = new Vector3(
+                Mathf.Max(THRESHOLD, newScale.x),
+                Mathf.Max(THRESHOLD, newScale.y),
+                Mathf.Max(THRESHOLD, newScale.z)
+            );
+
+            var targetL2W = target.localToWorldMatrix;
+            var baseToScaleCoord = (targetL2W * Matrix4x4.Scale(oldScale)).inverse * targetL2W;
+            var scaleToBaseCoord = Matrix4x4.Scale(newScale);
+            var updateTransform = scaleToBaseCoord * baseToScaleCoord;
+
+            foreach (Transform child in target)
+            {
+                Undo.RecordObject(child, "Adjust Child Position");
+                child.localPosition = updateTransform.MultiplyPoint(child.localPosition);
+            }
+        }
+
+        /// <summary>
+        /// MAのScaleAdjusterToolの「子オブジェクトの位置を調整」設定を取得
+        /// </summary>
+        private bool IsAdjustChildPositionsEnabled()
+        {
+            // nadena.dev.modular_avatar.core.editor.ScaleAdjusterTool.AdjustChildPositions を参照
+            var scaleAdjusterToolType = TypeCache.GetTypesDerivedFrom(typeof(object))
+                .FirstOrDefault(t => t.FullName == "nadena.dev.modular_avatar.core.editor.ScaleAdjusterTool");
+            
+            if (scaleAdjusterToolType == null) return false;
+
+            var field = scaleAdjusterToolType.GetField("AdjustChildPositions", 
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            
+            if (field == null) return false;
+
+            return (bool)field.GetValue(null);
         }
 
         private void UpdateCacheIfNeeded(Transform selection)
