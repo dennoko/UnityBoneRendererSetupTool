@@ -4,7 +4,6 @@ using Hays.BoneRendererSetup.Matching;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Animations.Rigging;
 
 namespace Hays.BoneRendererSetup.UI
 {
@@ -13,6 +12,7 @@ namespace Hays.BoneRendererSetup.UI
     /// </summary>
     public static class ContextMenuHandlers
     {
+#if HAS_ANIMATION_RIGGING
         private const string MenuBase = "GameObject/BoneRendererSetupTool/";
         
         // アバター用メニュー
@@ -235,7 +235,9 @@ namespace Hays.BoneRendererSetup.UI
             if (selected == null || selected.Length == 0)
                 return false;
 
-            return selected.Any(go => go.GetComponent<BoneRenderer>() != null);
+            // Service側で判定するか、ここでリフレクションを使う
+            // Service.HasBoneRenderer は単体判定なのでここではAnyで回すためService利用が楽
+            return selected.Any(go => BoneRendererService.HasBoneRenderer(go));
         }
 
         private static GameObject[] FindHumanoidAvatarsInScene()
@@ -268,5 +270,6 @@ namespace Hays.BoneRendererSetup.UI
         }
 
         #endregion
+#endif
     }
 }

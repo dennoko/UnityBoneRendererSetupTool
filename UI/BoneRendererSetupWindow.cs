@@ -83,6 +83,10 @@ namespace Hays.BoneRendererSetup.UI
 
         private void OnGUI()
         {
+#if !HAS_ANIMATION_RIGGING
+            DrawInstallGuide();
+            return;
+#endif
             _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
 
             EditorGUILayout.Space(10);
@@ -322,6 +326,35 @@ namespace Hays.BoneRendererSetup.UI
                     SearchAvatarInScene();
                 }
             }
-    }
+        }
+    
+#if !HAS_ANIMATION_RIGGING
+        private void DrawInstallGuide()
+        {
+            EditorGUILayout.Space(10);
+            EditorGUILayout.LabelField("Bone Renderer Setup Tool", EditorStyles.boldLabel);
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.HelpBox(
+                "このツールを使用するには、Unity公式の [Animation Rigging] パッケージが必要です。\n" +
+                "現在はインストールされていないため、機能が無効化されています。",
+                MessageType.Error);
+            
+            EditorGUILayout.Space(10);
+
+            if (GUILayout.Button("Package Manager を開く", GUILayout.Height(30)))
+            {
+                UnityEditor.PackageManager.UI.Window.Open("com.unity.animation.rigging");
+            }
+
+            EditorGUILayout.Space(15);
+            EditorGUILayout.LabelField("インストール手順:", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "1. 上記のボタンをクリックして Package Manager を開く\n" +
+                "2. 左上のプルダウンから [Unity Registry] を選択\n" +
+                "3. リストから [Animation Rigging] を探して [Install] をクリック",
+                MessageType.Info);
+        }
+#endif
 }
 }

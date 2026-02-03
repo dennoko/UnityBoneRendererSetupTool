@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.Animations.Rigging;
 
 namespace Hays.BoneRendererSetup.Core
 {
@@ -10,6 +9,7 @@ namespace Hays.BoneRendererSetup.Core
     /// </summary>
     public static class BoneRendererService
     {
+#if HAS_ANIMATION_RIGGING
         /// <summary>
         /// BoneRendererをセットアップする
         /// </summary>
@@ -25,11 +25,14 @@ namespace Hays.BoneRendererSetup.Core
                 return false;
             }
 
+            var type = GetBoneRendererType();
+            if (type == null) return false;
+
             // BoneRendererを取得または追加
-            var boneRenderer = target.GetComponent<BoneRenderer>();
+            var boneRenderer = target.GetComponent(type);
             if (boneRenderer == null)
             {
-                boneRenderer = Undo.AddComponent<BoneRenderer>(target);
+                boneRenderer = Undo.AddComponent(target, type);
             }
 
             // ボーンを設定
@@ -54,7 +57,10 @@ namespace Hays.BoneRendererSetup.Core
             if (target == null)
                 return false;
 
-            var renderers = target.GetComponents<BoneRenderer>();
+            var type = GetBoneRendererType();
+            if (type == null) return false;
+
+            var renderers = target.GetComponents(type);
             if (renderers.Length == 0)
                 return false;
 
@@ -71,13 +77,15 @@ namespace Hays.BoneRendererSetup.Core
         /// </summary>
         public static bool HasBoneRenderer(GameObject target)
         {
-            return target != null && target.GetComponent<BoneRenderer>() != null;
+            var type = GetBoneRendererType();
+            if (type == null) return false;
+            return target != null && target.GetComponent(type) != null;
         }
 
         /// <summary>
         /// 色を設定する
         /// </summary>
-        public static bool SetColor(BoneRenderer boneRenderer, Color color)
+        public static bool SetColor(Component boneRenderer, Color color)
         {
             if (boneRenderer == null)
                 return false;
@@ -96,7 +104,7 @@ namespace Hays.BoneRendererSetup.Core
             return true;
         }
 
-        private static bool AssignTransforms(BoneRenderer boneRenderer, List<Transform> transforms, out string error)
+        private static bool AssignTransforms(Component boneRenderer, List<Transform> transforms, out string error)
         {
             var so = new SerializedObject(boneRenderer);
             var transformsProp = so.FindProperty("m_Transforms") ?? so.FindProperty("m_Bones");
@@ -121,6 +129,11 @@ namespace Hays.BoneRendererSetup.Core
             return true;
         }
 
+        private static System.Type GetBoneRendererType()
+        {
+            return System.Type.GetType("UnityEngine.Animations.Rigging.BoneRenderer, Unity.Animation.Rigging");
+        }
+
         private static SerializedProperty FindColorProperty(SerializedObject so)
         {
             var candidates = new[] { "m_Color", "m_BoneColor", "color", "boneColor" };
@@ -132,5 +145,11 @@ namespace Hays.BoneRendererSetup.Core
             }
             return null;
         }
+#else
+        // Dummy implementation for when Animation Rigging is missing
+        public static bool SetupBoneRenderer(GameObject target, List<Transform> bones, Color color) => false;
+        public static bool RemoveBoneRenderer(GameObject target) => false;
+        public static bool HasBoneRenderer(GameObject target) => false;
+#endif
     }
 }

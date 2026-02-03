@@ -1,0 +1,22 @@
+{
+    "name": "Hays.BoneRendererSetup.Editor",
+    "rootNamespace": "Hays.BoneRendererSetup",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.animation.rigging",
+            "expression": "",
+            "define": "HAS_ANIMATION_RIGGING"
+        }
+    ],
+    "noEngineReferences": false
+}
