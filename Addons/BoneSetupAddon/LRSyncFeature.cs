@@ -32,6 +32,8 @@ namespace Hays.BoneRendererSetup.Addons
             set => _enabled = value;
         }
 
+        public GameObject TargetAvatar { get; set; }
+
         public Transform CachedRoot => _cachedRoot;
         public int CachedPairCount => _mirrorCache.Count / 2;
 
@@ -79,7 +81,7 @@ namespace Hays.BoneRendererSetup.Addons
 
         private void UpdateSync()
         {
-            if (!_enabled || _currentSelection == null || _currentSelection != _lastTrackedTransform) return;
+            if (!_enabled || TargetAvatar == null || _currentSelection == null || _currentSelection != _lastTrackedTransform) return;
             if (!_mirrorCache.ContainsKey(_currentSelection)) return;
             
             var mirror = _mirrorCache[_currentSelection];
@@ -167,10 +169,8 @@ namespace Hays.BoneRendererSetup.Addons
             }
             else if (mirrorComponent != null)
             {
-                // ソースにコンポーネントがなく、ミラーにある場合は削除（オプション）
-                // ユーザー要望は「コピーして適用」なので、ソースから削除された場合の同期は保留
-                // 必要であれば以下のコメントを解除:
-                // Undo.DestroyObjectImmediate(mirrorComponent);
+                // ソースにコンポーネントがなく、ミラーにある場合は削除
+                Undo.DestroyObjectImmediate(mirrorComponent);
             }
         }
 

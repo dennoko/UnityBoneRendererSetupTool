@@ -25,6 +25,8 @@ namespace Hays.BoneRendererSetup.Addons
             set => _enabled = value;
         }
 
+        public GameObject TargetAvatar { get; set; }
+
         public void Subscribe()
         {
             Selection.selectionChanged += OnSelectionChanged;
@@ -61,7 +63,7 @@ namespace Hays.BoneRendererSetup.Addons
 
         private void UpdateUniformScale()
         {
-            if (!_enabled || _currentSelection == null || _currentSelection != _lastTrackedTransform) return;
+            if (!_enabled || TargetAvatar == null || _currentSelection == null || _currentSelection != _lastTrackedTransform) return;
 
             Vector3 currentScale = _currentSelection.localScale;
             

@@ -47,6 +47,9 @@ namespace Hays.BoneRendererSetup.Addons
         public void OnGUI(GameObject avatar, GameObject outfit)
         {
             // L/R Sync UI
+            _lrSync.TargetAvatar = avatar;
+            _uniformScale.TargetAvatar = avatar;
+
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.LabelField(LabelLRSync, EditorStyles.boldLabel);
             
