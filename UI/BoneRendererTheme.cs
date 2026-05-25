@@ -83,7 +83,7 @@ namespace Hays.BoneRendererSetup.UI
             CardStyle.normal.background = _texCard;
             CardStyle.border  = new RectOffset(1, 1, 1, 1);
             CardStyle.padding = new RectOffset(10, 10, 8, 8);
-            CardStyle.margin  = new RectOffset(8, 8, 4, 4);
+            CardStyle.margin  = new RectOffset(8, 8, 8, 8);
 
             CardOuterStyle = new GUIStyle();
             CardOuterStyle.normal.background = _texCard;
