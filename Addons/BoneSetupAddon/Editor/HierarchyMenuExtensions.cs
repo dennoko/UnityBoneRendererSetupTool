@@ -53,9 +53,20 @@ namespace Hays.BoneRendererSetup.Addons
 
             Undo.RecordObject(targetBone.transform, "Align Bone with Avatar");
             
-            // Align World Position and Rotation
+            // Align World Position
             targetBone.transform.position = match.AvatarBone.position;
-            targetBone.transform.rotation = match.AvatarBone.rotation;
+
+            // Align Rotation with minimal world-space change to avoid twisting
+            if (TryGetBoneDirection(targetBone.transform, out var outfitDirection) &&
+                TryGetBoneDirection(match.AvatarBone, out var avatarDirection))
+            {
+                var rotationDelta = Quaternion.FromToRotation(outfitDirection, avatarDirection);
+                targetBone.transform.rotation = rotationDelta * targetBone.transform.rotation;
+            }
+            else
+            {
+                targetBone.transform.rotation = match.AvatarBone.rotation;
+            }
             
             Debug.Log($"[BoneRenderer] Aligned '{targetBone.name}' to '{match.AvatarBone.name}'");
         }
@@ -68,6 +79,54 @@ namespace Hays.BoneRendererSetup.Addons
                    BoneRendererSetupWindow.Instance.CurrentAvatar != null &&
                    BoneRendererSetupWindow.Instance.CurrentOutfit != null &&
                    Selection.activeGameObject != null;
+        }
+
+        private static bool TryGetBoneDirection(Transform bone, out Vector3 direction)
+        {
+            direction = Vector3.zero;
+            if (bone == null)
+                return false;
+
+            var child = GetPrimaryChild(bone);
+            if (child != null)
+            {
+                var childDelta = child.position - bone.position;
+                if (childDelta.sqrMagnitude > Mathf.Epsilon)
+                {
+                    direction = childDelta.normalized;
+                    return true;
+                }
+            }
+
+            if (bone.parent != null)
+            {
+                var parentDelta = bone.position - bone.parent.position;
+                if (parentDelta.sqrMagnitude > Mathf.Epsilon)
+                {
+                    direction = parentDelta.normalized;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Transform GetPrimaryChild(Transform bone)
+        {
+            Transform best = null;
+            var bestDistance = 0f;
+
+            foreach (Transform child in bone)
+            {
+                var distance = (child.position - bone.position).sqrMagnitude;
+                if (distance > bestDistance)
+                {
+                    bestDistance = distance;
+                    best = child;
+                }
+            }
+
+            return best;
         }
     }
 }
