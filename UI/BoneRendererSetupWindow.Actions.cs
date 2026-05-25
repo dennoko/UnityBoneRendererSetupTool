@@ -42,9 +42,15 @@ namespace Hays.BoneRendererSetup.UI
             if (_outfit == null || _avatar == null)
                 return;
 
+            var avatarHasUpperChest = AvatarBoneMapper.HasUpperChest(_avatar);
+            var outfitHasUpperChest = OutfitBoneMapper.OutfitHasUpperChest(_outfit);
+            var upperChestMismatch = avatarHasUpperChest != outfitHasUpperChest;
+
             var matches = OutfitBoneMapper.GetDetailedMatches(_outfit, _avatar);
             var bones = matches
-                .Where(m => m.AvatarBone != null || m.HumanBone == HumanBodyBones.UpperChest)
+                .Where(m => m.AvatarBone != null
+                    || m.HumanBone == HumanBodyBones.UpperChest
+                    || (upperChestMismatch && m.HumanBone == HumanBodyBones.Chest))
                 .Select(m => m.OutfitBone)
                 .ToList();
 
@@ -63,7 +69,13 @@ namespace Hays.BoneRendererSetup.UI
                 MarkSceneDirty();
                 Debug.Log($"[BoneRendererSetup] {_outfit.name}: {_avatar.name}を参照して{bones.Count}個のボーンを設定しました。");
 
-                var skipped = matches.Where(m => m.AvatarBone == null).ToList();
+                // 実際に除外されたボーンのみをスキップとして扱う
+                // (UpperChestミスマッチ時にChest/UpperChestを意図的に含めた場合はスキップ扱いしない)
+                var skipped = matches
+                    .Where(m => m.AvatarBone == null
+                        && m.HumanBone != HumanBodyBones.UpperChest
+                        && !(upperChestMismatch && m.HumanBone == HumanBodyBones.Chest))
+                    .ToList();
                 if (skipped.Count > 0)
                 {
                     SetStatus($"{bones.Count} 個設定 / {skipped.Count} 個スキップ", StatusType.Warning);
