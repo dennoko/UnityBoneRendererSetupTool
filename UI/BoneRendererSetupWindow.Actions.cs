@@ -41,7 +41,7 @@ namespace Hays.BoneRendererSetup.UI
 
             var matches = OutfitBoneMapper.GetDetailedMatches(_outfit, _avatar);
             var bones = matches
-                .Where(m => m.AvatarBone != null)
+                .Where(m => m.AvatarBone != null || m.HumanBone == HumanBodyBones.UpperChest)
                 .Select(m => m.OutfitBone)
                 .ToList();
 
