@@ -55,7 +55,10 @@ namespace Hays.BoneRendererSetup.Addons
 
             // Align Rotation（座標フレームベースでねじれを防止）
             AlignBoneRotation(targetBone.transform, match.AvatarBone, matches);
-            
+
+            // 子ボーン始点が直線上にある場合、MA Scale Adjuster で距離を揃える
+            MAScaleAdjusterApplier.TryApplyScaleAdjuster(targetBone.transform, match.AvatarBone, matches);
+
             Debug.Log($"[BoneRenderer] Aligned '{targetBone.name}' to '{match.AvatarBone.name}'");
         }
 
