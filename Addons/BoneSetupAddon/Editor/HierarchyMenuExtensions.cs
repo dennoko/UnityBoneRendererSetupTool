@@ -53,32 +53,33 @@ namespace Hays.BoneRendererSetup.Addons
             // Align World Position
             targetBone.transform.position = match.AvatarBone.position;
 
-            // Align Rotation（座標フレームベースでねじれを防止）
+            // Align Rotation（スイング・ツイスト分解でねじれを防止）
             AlignBoneRotation(targetBone.transform, match.AvatarBone, matches);
 
             // 子ボーン始点が直線上にある場合、MA Scale Adjuster で距離を揃える
             MAScaleAdjusterApplier.TryApplyScaleAdjuster(targetBone.transform, match.AvatarBone, matches);
 
+            // 自動付与した MA Scale Adjuster を対になるボーンへ即時同期する。
+            // update ループのアクティブ選択追従に依存しないため、複数ボーンの一括 Align でも確実に左右同期される。
+            LRSyncFeature.Instance?.SyncMirrorScaleAdjuster(targetBone.transform);
+
             Debug.Log($"[BoneRenderer] Aligned '{targetBone.name}' to '{match.AvatarBone.name}'");
         }
 
         /// <summary>
-        /// ボーンの回転を合わせる。
-        /// 子ボーン・孫ボーンの方向から座標フレームを構築し、ねじれなく回転を揃える。
-        /// フォールバック: 子ボーンのみ → 方向合わせ（ロール保持）、子なし → 回転変更なし
+        /// ボーンの回転をスイング・ツイスト分解で合わせる。
+        /// Step1(スイング): 子方向をアバターに合わせる。
+        /// Step2(ツイスト): アバターボーンの実際のワールド回転を参照してロールを揃える。
+        /// 孫ボーン位置やFBXバインドポーズに依存しないため、A-pose/T-pose差も吸収できる。
         /// </summary>
         private static void AlignBoneRotation(
             Transform outfitBone, Transform avatarBone,
             List<OutfitBoneMapper.MatchResult> matches)
         {
-            // マッチ済みの子ボーンペアを探す
             FindMatchedChild(outfitBone, matches, out var outfitChild, out var avatarChild);
 
             if (outfitChild == null || avatarChild == null)
-            {
-                // 子ボーンなし: 回転は変更しない（位置のみ）
                 return;
-            }
 
             Vector3 outfitDir = outfitChild.position - outfitBone.position;
             Vector3 avatarDir = avatarChild.position - avatarBone.position;
@@ -89,64 +90,68 @@ namespace Hays.BoneRendererSetup.Addons
             outfitDir.Normalize();
             avatarDir.Normalize();
 
-            // マッチ済みの孫ボーンペアを探す（3軸決定用）
-            FindMatchedChild(outfitChild, matches, out var outfitGrandChild, out var avatarGrandChild);
+            // Step1: スイング — 子ボーンの方向だけを合わせる（ロールは無視）
+            Quaternion swing = Quaternion.FromToRotation(outfitDir, avatarDir);
+            outfitBone.rotation = swing * outfitBone.rotation;
 
-            if (outfitGrandChild != null && avatarGrandChild != null)
+            // Step2: ツイスト — ロールをアバターボーンの実際のワールド回転に揃える
+            // 骨方向に最も垂直なローカル軸を取得し、骨方向の平面へ投影して比較する
+            Vector3 avatarPerp = Vector3.ProjectOnPlane(
+                GetMostPerpendicularAxis(avatarBone, avatarDir), avatarDir);
+            Vector3 outfitPerp = Vector3.ProjectOnPlane(
+                GetMostPerpendicularAxis(outfitBone, avatarDir), avatarDir);
+
+            if (avatarPerp.sqrMagnitude > 1e-6f && outfitPerp.sqrMagnitude > 1e-6f)
             {
-                // 3軸決定: 子方向 + 曲がり平面の法線から座標フレームを構築
-                Vector3 outfitDir2 = (outfitGrandChild.position - outfitChild.position);
-                Vector3 avatarDir2 = (avatarGrandChild.position - avatarChild.position);
-
-                if (outfitDir2.sqrMagnitude > 1e-6f && avatarDir2.sqrMagnitude > 1e-6f)
-                {
-                    outfitDir2.Normalize();
-                    avatarDir2.Normalize();
-
-                    // 曲がり平面の法線（外積）で2軸目を決定
-                    Vector3 outfitNormal = Vector3.Cross(outfitDir, outfitDir2);
-                    Vector3 avatarNormal = Vector3.Cross(avatarDir, avatarDir2);
-
-                    if (outfitNormal.sqrMagnitude > 1e-6f && avatarNormal.sqrMagnitude > 1e-6f)
-                    {
-                        outfitNormal.Normalize();
-                        avatarNormal.Normalize();
-
-                        // 各座標フレームを構築
-                        Quaternion outfitFrame = Quaternion.LookRotation(outfitDir, outfitNormal);
-                        Quaternion avatarFrame = Quaternion.LookRotation(avatarDir, avatarNormal);
-
-                        // 補正回転: outfitのフレーム → avatarのフレームへの変換
-                        Quaternion correction = avatarFrame * Quaternion.Inverse(outfitFrame);
-                        outfitBone.rotation = correction * outfitBone.rotation;
-                        return;
-                    }
-                }
+                Quaternion twist = Quaternion.FromToRotation(
+                    outfitPerp.normalized, avatarPerp.normalized);
+                outfitBone.rotation = twist * outfitBone.rotation;
             }
-
-            // フォールバック: 1軸のみ（子方向を合わせ、ロールは保持）
-            Quaternion dirCorrection = Quaternion.FromToRotation(outfitDir, avatarDir);
-            outfitBone.rotation = dirCorrection * outfitBone.rotation;
         }
 
         /// <summary>
-        /// 指定ボーンの子の中からマッチ済みペアを探す
+        /// ボーンのローカル軸（right/up/forward）の中で boneDir に最も垂直なものをワールド座標で返す
+        /// </summary>
+        private static Vector3 GetMostPerpendicularAxis(Transform bone, Vector3 boneDir)
+        {
+            Vector3 r = bone.right, u = bone.up, f = bone.forward;
+            float dr = Mathf.Abs(Vector3.Dot(r, boneDir));
+            float du = Mathf.Abs(Vector3.Dot(u, boneDir));
+            float df = Mathf.Abs(Vector3.Dot(f, boneDir));
+            if (dr <= du && dr <= df) return r;
+            if (du <= df) return u;
+            return f;
+        }
+
+        /// <summary>
+        /// 指定ボーンの子の中からマッチ済みペアを探す。
+        /// preferredDir が指定されている場合は、その方向と最も内積が高い子を優先する（案D）。
         /// </summary>
         private static void FindMatchedChild(
             Transform parent, List<OutfitBoneMapper.MatchResult> matches,
-            out Transform outfitChild, out Transform avatarChild)
+            out Transform outfitChild, out Transform avatarChild,
+            Vector3 preferredDir = default)
         {
             outfitChild = null;
             avatarChild = null;
 
+            bool useDir = preferredDir.sqrMagnitude > 1e-6f;
+            float bestScore = float.NegativeInfinity;
+
             foreach (Transform child in parent)
             {
                 var childMatch = matches.FirstOrDefault(m => m.OutfitBone == child);
-                if (childMatch.OutfitBone != null && childMatch.AvatarBone != null)
+                if (childMatch.OutfitBone == null || childMatch.AvatarBone == null) continue;
+
+                float score = useDir
+                    ? Vector3.Dot((child.position - parent.position).normalized, preferredDir)
+                    : 0f;
+
+                if (outfitChild == null || score > bestScore)
                 {
+                    bestScore = score;
                     outfitChild = childMatch.OutfitBone;
                     avatarChild = childMatch.AvatarBone;
-                    return;
                 }
             }
         }

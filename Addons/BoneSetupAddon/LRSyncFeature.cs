@@ -13,6 +13,12 @@ namespace Hays.BoneRendererSetup.Addons
     /// </summary>
     public class LRSyncFeature
     {
+        /// <summary>
+        /// 現在 Subscribe 中のインスタンス。
+        /// 選択状態に依存しない外部からの即時同期（自動付与直後など）で使用する。
+        /// </summary>
+        public static LRSyncFeature Instance { get; private set; }
+
         private bool _enabled = true;
         private Transform _currentSelection;
         private Transform _cachedRoot;
@@ -42,12 +48,14 @@ namespace Hays.BoneRendererSetup.Addons
             Selection.selectionChanged += OnSelectionChanged;
             EditorApplication.update += UpdateSync;
             CacheMAType();
+            Instance = this;
         }
 
         public void Unsubscribe()
         {
             Selection.selectionChanged -= OnSelectionChanged;
             EditorApplication.update -= UpdateSync;
+            if (Instance == this) Instance = null;
         }
 
         private void CacheMAType()
@@ -118,6 +126,24 @@ namespace Hays.BoneRendererSetup.Addons
 
             // MA Scale Adjuster の同期
             SyncMAScaleAdjuster(_currentSelection, mirror);
+        }
+
+        /// <summary>
+        /// 指定ボーンの MA Scale Adjuster を対になるボーンへ即時ミラーリングする。
+        /// アクティブ選択や update ループに依存しないため、
+        /// MA Scale Adjuster の自動付与（Align with Avatar）直後など、
+        /// 複数ボーンを一括処理するケースでも確実に左右同期できる。
+        /// </summary>
+        public void SyncMirrorScaleAdjuster(Transform source)
+        {
+            if (!_enabled || source == null) return;
+
+            // 選択変更を伴わない呼び出しのため、ミラーキャッシュを明示的に更新する
+            UpdateCacheIfNeeded(source);
+
+            if (!_mirrorCache.TryGetValue(source, out var mirror) || mirror == null) return;
+
+            SyncMAScaleAdjuster(source, mirror);
         }
 
         /// <summary>
