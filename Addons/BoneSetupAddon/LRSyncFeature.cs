@@ -129,21 +129,20 @@ namespace Hays.BoneRendererSetup.Addons
         }
 
         /// <summary>
-        /// 指定ボーンの MA Scale Adjuster を対になるボーンへ即時ミラーリングする。
-        /// アクティブ選択や update ループに依存しないため、
-        /// MA Scale Adjuster の自動付与（Align with Avatar）直後など、
-        /// 複数ボーンを一括処理するケースでも確実に左右同期できる。
+        /// 指定ボーンと対になるミラーボーンを返す（存在しない場合や同期無効時は null）。
+        /// MA Scale Adjuster の m_Scale はボーンのローカル軸に依存する量のため、
+        /// 値をそのままミラーへコピーすると左右のローカルフレームが対称でない場合に
+        /// ボーン長が左右で変わってしまう。呼び出し側はこのメソッドでミラーを取得し、
+        /// ミラー側の幾何情報から改めてスケールを計算すること。
         /// </summary>
-        public void SyncMirrorScaleAdjuster(Transform source)
+        public Transform TryGetMirror(Transform source)
         {
-            if (!_enabled || source == null) return;
+            if (!_enabled || source == null) return null;
 
             // 選択変更を伴わない呼び出しのため、ミラーキャッシュを明示的に更新する
             UpdateCacheIfNeeded(source);
 
-            if (!_mirrorCache.TryGetValue(source, out var mirror) || mirror == null) return;
-
-            SyncMAScaleAdjuster(source, mirror);
+            return _mirrorCache.TryGetValue(source, out var mirror) ? mirror : null;
         }
 
         /// <summary>

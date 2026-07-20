@@ -48,22 +48,43 @@ namespace Hays.BoneRendererSetup.Addons
                 return;
             }
 
-            Undo.RecordObject(targetBone.transform, "Align Bone with Avatar");
-            
+            AlignSingleBone(targetBone.transform, match.AvatarBone, matches);
+
+            // 左右同期が有効な場合、ミラーボーンも同じ手順で Align する。
+            // MA Scale Adjuster の m_Scale はローカル軸依存の量のため、値のコピーでは
+            // 左右のローカルフレームが対称でないケースでボーン長がずれる。
+            // ミラー側も自身の幾何情報から位置・回転・スケールを再計算することで左右差を防ぐ。
+            var mirrorBone = LRSyncFeature.Instance?.TryGetMirror(targetBone.transform);
+            if (mirrorBone != null)
+            {
+                var mirrorMatch = matches.FirstOrDefault(m => m.OutfitBone == mirrorBone);
+                if (mirrorMatch.OutfitBone != null && mirrorMatch.AvatarBone != null)
+                {
+                    AlignSingleBone(mirrorBone, mirrorMatch.AvatarBone, matches);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 1本のボーンをアバターへ Align する（位置 → 回転 → MA Scale Adjuster）。
+        /// スケールはこのボーン自身のローカル空間で計算されるため、他ボーンへの値コピーは行わないこと。
+        /// </summary>
+        private static void AlignSingleBone(
+            Transform outfitBone, Transform avatarBone,
+            List<OutfitBoneMapper.MatchResult> matches)
+        {
+            Undo.RecordObject(outfitBone, "Align Bone with Avatar");
+
             // Align World Position
-            targetBone.transform.position = match.AvatarBone.position;
+            outfitBone.position = avatarBone.position;
 
             // Align Rotation（スイング・ツイスト分解でねじれを防止）
-            AlignBoneRotation(targetBone.transform, match.AvatarBone, matches);
+            AlignBoneRotation(outfitBone, avatarBone, matches);
 
             // 子ボーン始点が直線上にある場合、MA Scale Adjuster で距離を揃える
-            MAScaleAdjusterApplier.TryApplyScaleAdjuster(targetBone.transform, match.AvatarBone, matches);
+            MAScaleAdjusterApplier.TryApplyScaleAdjuster(outfitBone, avatarBone, matches);
 
-            // 自動付与した MA Scale Adjuster を対になるボーンへ即時同期する。
-            // update ループのアクティブ選択追従に依存しないため、複数ボーンの一括 Align でも確実に左右同期される。
-            LRSyncFeature.Instance?.SyncMirrorScaleAdjuster(targetBone.transform);
-
-            Debug.Log($"[BoneRenderer] Aligned '{targetBone.name}' to '{match.AvatarBone.name}'");
+            Debug.Log($"[BoneRenderer] Aligned '{outfitBone.name}' to '{avatarBone.name}'");
         }
 
         /// <summary>

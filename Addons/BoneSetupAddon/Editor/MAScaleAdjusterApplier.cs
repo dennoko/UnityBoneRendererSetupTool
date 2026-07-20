@@ -47,10 +47,16 @@ namespace Hays.BoneRendererSetup.Addons
             Vector3 avatarLocal = avatarBone.InverseTransformPoint(avatarChild.position);
             Vector3 scale = ComputePerAxisScale(outfitLocal, avatarLocal);
 
-            if (Vector3.Distance(scale, Vector3.one) < ScaleChangeThreshold) return;
-
             var maType = GetMAType();
             if (maType == null) return;
+
+            if (Vector3.Distance(scale, Vector3.one) < ScaleChangeThreshold)
+            {
+                // スケール調整が不要でも、過去に付与された Adjuster が古い値を持っている場合が
+                // あるため、放置せず 1 にリセットする（左右同期で古い値が伝播するのを防ぐ）
+                ResetScaleAdjusterIfPresent(outfitBone, maType);
+                return;
+            }
 
             SetOrUpdateScaleAdjuster(outfitBone, maType, scale);
             Debug.Log($"[BoneRenderer] Applied MA Scale Adjuster to '{outfitBone.name}': scale = {scale}");
@@ -77,6 +83,22 @@ namespace Hays.BoneRendererSetup.Addons
             float s = avatarComp / outfitComp;
             // 符号反転は回転ずれを意味するので対象外
             return s > 0f ? s : 1f;
+        }
+
+        private static void ResetScaleAdjusterIfPresent(Transform outfitBone, System.Type maType)
+        {
+            var component = outfitBone.GetComponent(maType);
+            if (component == null) return;
+
+            var so = new SerializedObject(component);
+            var scaleProp = so.FindProperty("m_Scale");
+            if (scaleProp == null || scaleProp.vector3Value == Vector3.one) return;
+
+            Undo.RecordObject(component, "Reset MA Scale Adjuster");
+            so.Update();
+            scaleProp.vector3Value = Vector3.one;
+            so.ApplyModifiedProperties();
+            Debug.Log($"[BoneRenderer] Reset MA Scale Adjuster on '{outfitBone.name}' (scale not needed)");
         }
 
         private static void SetOrUpdateScaleAdjuster(Transform outfitBone, System.Type maType, Vector3 scale)
