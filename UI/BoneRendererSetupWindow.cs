@@ -3,30 +3,75 @@ using Hays.BoneRendererSetup.Core;
 using Hays.BoneRendererSetup.Matching;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Hays.BoneRendererSetup.UI
 {
     public partial class BoneRendererSetupWindow : EditorWindow
     {
+        // UI/*.uxml, UI/*.uss の .meta に記載された GUID
+        private const string UxmlGuid = "81929f1bb3567eb340e4d1d4754e7a10";
+        private const string ThemeUssGuid = "ffa252124638f37251ea5c7b74c4239c";
+        private const string WindowUssGuid = "f9775a3dbd2c12b575b60341fd2c578d";
+
         // ─── State ───────────────────────────────────────────────────────────
 
         private GameObject _avatar;
         private GameObject _outfit;
         private List<IAddonFeature> _addons = new List<IAddonFeature>();
+        private readonly List<IMGUIContainer> _addonContainers = new List<IMGUIContainer>();
 
         public static BoneRendererSetupWindow Instance { get; private set; }
         public GameObject CurrentAvatar => _avatar;
         public GameObject CurrentOutfit => _outfit;
 
-        private Vector2 _scrollPosition;
-
         // ─── Status ──────────────────────────────────────────────────────────
 
         public enum StatusType { Info, Success, Error, Warning }
-        private string     _statusMessage   = "Ready";
-        private StatusType _statusType      = StatusType.Info;
-        private double     _statusResetTime = -1.0;
+
+        private Label _statusLabel;
+        private IVisualElementScheduledItem _statusResetSchedule;
+
+        // ─── UI 要素 ─────────────────────────────────────────────────────────
+
+        private ObjectField _avatarField;
+        private ObjectField _outfitField;
+        private Label _avatarInfoLabel;
+        private Label _outfitInfoLabel;
+        private Label _outfitWarningLabel;
+        private Button _avatarSetupButton;
+        private Button _avatarRemoveButton;
+        private Button _outfitSetupButton;
+        private Button _outfitRemoveButton;
+
+        // ─── 標準フォント: OS のメイリオ ─────────────────────────────────
+        // フォントアセットを同梱せず、端末インストール済みのメイリオを動的参照する。
+        // レガシー Font (Font.CreateDynamicFontFromOSFont) を FontDefinition.FromFont() で
+        // 渡すとグリフ生成に失敗し文字が一切表示されなくなるため、OS フォントから直接
+        // SDF FontAsset を生成すること。未搭載環境では null を返しエディタ標準フォントにフォールバックする。
+        private const string UiFontFamily = "Meiryo";
+        private static UnityEngine.TextCore.Text.FontAsset _uiFontAsset;
+        private static bool _uiFontSearched;
+
+        private static UnityEngine.TextCore.Text.FontAsset GetUIFontAsset()
+        {
+            if (_uiFontSearched) return _uiFontAsset;
+            _uiFontSearched = true;
+
+            try
+            {
+                _uiFontAsset = UnityEngine.TextCore.Text.FontAsset.CreateFontAsset(UiFontFamily, "Regular");
+                if (_uiFontAsset != null)
+                    _uiFontAsset.hideFlags = HideFlags.HideAndDontSave;
+            }
+            catch
+            {
+                _uiFontAsset = null;
+            }
+            return _uiFontAsset;
+        }
 
         // ─── Window Registration ─────────────────────────────────────────────
 
@@ -45,11 +90,13 @@ namespace Hays.BoneRendererSetup.UI
             Instance = this;
             LoadAddons();
             SceneView.duringSceneGui += OnSceneGUI;
+            Selection.selectionChanged += OnSelectionChangedForAddons;
         }
 
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            Selection.selectionChanged -= OnSelectionChangedForAddons;
             foreach (var addon in _addons)
                 addon.OnDisable();
             if (Instance == this) Instance = null;
@@ -81,284 +128,324 @@ namespace Hays.BoneRendererSetup.UI
                 addon.OnSceneGUI(sceneView);
         }
 
-        // ─── OnGUI Entry Point ───────────────────────────────────────────────
-
-        private void OnGUI()
+        /// <summary>アドオンパネルは IMGUI 併用のため、選択変更時に明示的に再描画する。</summary>
+        private void OnSelectionChangedForAddons()
         {
-            if (_statusResetTime > 0 && EditorApplication.timeSinceStartup > _statusResetTime)
+            foreach (var container in _addonContainers)
+                container.MarkDirtyRepaint();
+        }
+
+        // ─── CreateGUI (UI Toolkit エントリポイント) ─────────────────────────
+
+        public void CreateGUI()
+        {
+            VisualElement root = rootVisualElement;
+
+            // テーマ非依存のためのルートクラスを適用
+            root.AddToClassList("dennoko-root");
+            // USS ロード失敗時も背景が明るくならないよう Surface0 を C# 側でも保証
+            root.style.backgroundColor = (Color)new Color32(0x12, 0x12, 0x12, 0xFF);
+            root.style.flexGrow = 1;
+
+            var uiFontAsset = GetUIFontAsset();
+            if (uiFontAsset != null)
+                root.style.unityFontDefinition = FontDefinition.FromSDFFont(uiFontAsset);
+
+            LoadStyleSheet(root, ThemeUssGuid);
+            LoadStyleSheet(root, WindowUssGuid);
+
+            string uxmlPath = AssetDatabase.GUIDToAssetPath(UxmlGuid);
+            var uxml = string.IsNullOrEmpty(uxmlPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(uxmlPath);
+            if (uxml == null)
             {
-                _statusMessage   = "Ready";
-                _statusType      = StatusType.Info;
-                _statusResetTime = -1.0;
+                root.Add(new Label("UXML Asset が見つかりません。GUID を確認してください。"));
+                return;
             }
+            uxml.CloneTree(root);
 
-            BoneRendererTheme.Initialize();
-            BoneRendererTheme.PushEditorTheme();
-            try
-            {
-                EditorGUI.DrawRect(new Rect(0, 0, position.width, position.height), BoneRendererTheme.Surface0);
+            InitializeUI(root);
+        }
 
-#if !HAS_ANIMATION_RIGGING
-                DrawInstallGuide();
+        private static void LoadStyleSheet(VisualElement root, string guid)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            var uss = string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
+            if (uss != null)
+                root.styleSheets.Add(uss);
+            else
+                Debug.LogWarning($"[BoneRendererSetupWindow] USS が見つかりません。GUID を確認してください: {guid}");
+        }
+
+        // ─── バインディング ─────────────────────────────────────────────────
+
+        private void InitializeUI(VisualElement root)
+        {
+            _statusLabel = root.Q<Label>("status-label");
+
+            var installGuideRoot = root.Q<VisualElement>("install-guide-root");
+            var mainScroll = root.Q<ScrollView>("main-scroll");
+
+#if HAS_ANIMATION_RIGGING
+            installGuideRoot.style.display = DisplayStyle.None;
+            mainScroll.style.display = DisplayStyle.Flex;
+            InitializeMainUI(root);
 #else
-                DrawHeader();
-                _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
-                DrawSettingsArea();
-                EditorGUILayout.EndScrollView();
-                DrawStatusBar();
+            installGuideRoot.style.display = DisplayStyle.Flex;
+            mainScroll.style.display = DisplayStyle.None;
+            InitializeInstallGuide(root);
 #endif
-            }
-            finally
-            {
-                BoneRendererTheme.PopEditorTheme();
-            }
         }
 
-        // ─── Header ──────────────────────────────────────────────────────────
-
-        private void DrawHeader()
+#if HAS_ANIMATION_RIGGING
+        private void InitializeMainUI(VisualElement root)
         {
-            EditorGUILayout.Space(6);
-            GUILayout.BeginHorizontal();
-            GUILayout.Space(8);
-            GUILayout.Label("Bone Renderer Setup", BoneRendererTheme.TitleStyle);
-            GUILayout.FlexibleSpace();
-            GUILayout.Space(8);
-            GUILayout.EndHorizontal();
-            EditorGUILayout.Space(4);
-            DrawSeparator();
+            root.Q<Button>("search-avatar-button").clicked += SearchAvatarInScene;
+
+            _avatarField = root.Q<ObjectField>("avatar-field");
+            _avatarField.objectType = typeof(GameObject);
+            _avatarField.SetValueWithoutNotify(_avatar);
+            _avatarField.RegisterValueChangedCallback(OnAvatarFieldChanged);
+            root.Q<Button>("avatar-clear-button").clicked += ClearAvatar;
+            _avatarInfoLabel = root.Q<Label>("avatar-info-label");
+            _avatarSetupButton = root.Q<Button>("avatar-setup-button");
+            _avatarSetupButton.clicked += () => { SetupAvatar(); RefreshAvatarUI(); };
+            _avatarRemoveButton = root.Q<Button>("avatar-remove-button");
+            _avatarRemoveButton.clicked += () => { RemoveRenderer(_avatar); RefreshAvatarUI(); };
+
+            _outfitField = root.Q<ObjectField>("outfit-field");
+            _outfitField.objectType = typeof(GameObject);
+            _outfitField.SetValueWithoutNotify(_outfit);
+            _outfitField.RegisterValueChangedCallback(OnOutfitFieldChanged);
+            root.Q<Button>("outfit-clear-button").clicked += ClearOutfit;
+            _outfitInfoLabel = root.Q<Label>("outfit-info-label");
+            _outfitWarningLabel = root.Q<Label>("outfit-warning-label");
+            _outfitSetupButton = root.Q<Button>("outfit-setup-button");
+            _outfitSetupButton.clicked += () => { SetupOutfit(); RefreshOutfitUI(); };
+            _outfitRemoveButton = root.Q<Button>("outfit-remove-button");
+            _outfitRemoveButton.clicked += () => { RemoveRenderer(_outfit); RefreshOutfitUI(); };
+
+            BuildAddonCards(root.Q<VisualElement>("addon-container"));
+
+            var avatarColorField = root.Q<ColorField>("avatar-color-field");
+            avatarColorField.value = BoneRendererSettings.AvatarColor;
+            avatarColorField.RegisterValueChangedCallback(evt => BoneRendererSettings.AvatarColor = evt.newValue);
+
+            var outfitColorField = root.Q<ColorField>("outfit-color-field");
+            outfitColorField.value = BoneRendererSettings.OutfitColor;
+            outfitColorField.RegisterValueChangedCallback(evt => BoneRendererSettings.OutfitColor = evt.newValue);
+
+            RefreshAvatarUI();
+            RefreshOutfitUI();
         }
 
-        // ─── Settings Area ───────────────────────────────────────────────────
-
-        private void DrawSettingsArea()
+        private void OnAvatarFieldChanged(ChangeEvent<UnityEngine.Object> evt)
         {
-            GUILayout.BeginVertical();
-            GUILayout.Space(4);
-
-            DrawSection("UTILITY", DrawUtilityContent);
-            DrawSection("AVATAR", DrawAvatarContent);
-            DrawSection("OUTFIT", DrawOutfitContent);
-
-            foreach (var addon in _addons)
-            {
-                var captured = addon;
-                DrawSection(captured.DisplayName.ToUpper(), () => captured.OnGUI(_avatar, _outfit));
-            }
-
-            DrawSection("COLOR SETTINGS", DrawColorSettings);
-
-            GUILayout.Space(4);
-            GUILayout.EndVertical();
+            var newAvatar = evt.newValue as GameObject;
+            if (_avatar != null && newAvatar != _avatar)
+                RemoveRenderer(_avatar);
+            _avatar = newAvatar;
+            if (_avatar != null && CanSetupAvatar())
+                SetupAvatar();
+            RefreshAvatarUI();
+            RefreshOutfitUI();
         }
 
-        // ─── Section Contents ────────────────────────────────────────────────
-
-        private void DrawColorSettings()
+        private void OnOutfitFieldChanged(ChangeEvent<UnityEngine.Object> evt)
         {
-            EditorGUI.BeginChangeCheck();
-            var avatarColor = EditorGUILayout.ColorField("Avatar Color", BoneRendererSettings.AvatarColor);
-            if (EditorGUI.EndChangeCheck())
-                BoneRendererSettings.AvatarColor = avatarColor;
-
-            EditorGUI.BeginChangeCheck();
-            var outfitColor = EditorGUILayout.ColorField("Outfit Color", BoneRendererSettings.OutfitColor);
-            if (EditorGUI.EndChangeCheck())
-                BoneRendererSettings.OutfitColor = outfitColor;
+            var newOutfit = evt.newValue as GameObject;
+            if (_outfit != null && newOutfit != _outfit)
+                RemoveRenderer(_outfit);
+            _outfit = newOutfit;
+            if (_outfit != null && CanSetupOutfit())
+                SetupOutfit();
+            RefreshOutfitUI();
         }
 
-        private void DrawAvatarContent()
+        private void ClearAvatar()
         {
-            // ObjectField + Clear
-            GUILayout.BeginHorizontal();
-            EditorGUI.BeginChangeCheck();
-            var newAvatar = (GameObject)EditorGUILayout.ObjectField(_avatar, typeof(GameObject), true);
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (_avatar != null && newAvatar != _avatar)
-                    RemoveRenderer(_avatar);
-                _avatar = newAvatar;
-                if (_avatar != null && CanSetupAvatar())
-                    SetupAvatar();
-            }
-            if (GUILayout.Button("Clear", BoneRendererTheme.MiniButtonStyle, GUILayout.Width(50)))
-            {
-                if (_avatar != null) RemoveRenderer(_avatar);
-                _avatar = null;
-            }
-            GUILayout.EndHorizontal();
+            if (_avatar != null) RemoveRenderer(_avatar);
+            _avatar = null;
+            _avatarField.SetValueWithoutNotify(null);
+            RefreshAvatarUI();
+            RefreshOutfitUI();
+        }
 
-            // Info / Warning
+        private void ClearOutfit()
+        {
+            if (_outfit != null) RemoveRenderer(_outfit);
+            _outfit = null;
+            _outfitField.SetValueWithoutNotify(null);
+            RefreshOutfitUI();
+        }
+#endif
+
+        // RefreshAvatarUI / RefreshOutfitUI は Actions.cs (SetAvatarAndSetup) からも
+        // 呼ばれるため、HAS_ANIMATION_RIGGING の有無に関わらず常にコンパイルされる必要がある。
+        // 対象の UI 要素は #if HAS_ANIMATION_RIGGING 側で生成されなかった場合 null のままなので、
+        // 各メソッド冒頭の null チェックで安全に no-op になる。
+
+        /// <summary>AVATAR カードの情報表示・ボタン活性状態を現在の _avatar に合わせて更新する。</summary>
+        private void RefreshAvatarUI()
+        {
+            if (_avatarInfoLabel == null) return;
+
             if (_avatar != null)
             {
                 if (AvatarBoneMapper.IsHumanoidAvatar(_avatar))
                 {
-                    var boneCount     = AvatarBoneMapper.GetHumanoidBones(_avatar).Count;
+                    var boneCount = AvatarBoneMapper.GetHumanoidBones(_avatar).Count;
                     var hasUpperChest = AvatarBoneMapper.HasUpperChest(_avatar);
-                    GUILayout.Box(
-                        $"Humanoid Avatar ({boneCount} bones)  |  UpperChest: {(hasUpperChest ? "あり" : "なし")}",
-                        BoneRendererTheme.StatusInfoStyle, GUILayout.ExpandWidth(true));
+                    _avatarInfoLabel.text = $"Humanoid Avatar ({boneCount} bones)  |  UpperChest: {(hasUpperChest ? "あり" : "なし")}";
+                    _avatarInfoLabel.EnableInClassList("dennoko-status--warning", false);
                 }
                 else
                 {
-                    GUILayout.Box("Humanoid Avatar ではありません",
-                        BoneRendererTheme.StatusWarningStyle, GUILayout.ExpandWidth(true));
+                    _avatarInfoLabel.text = "Humanoid Avatar ではありません";
+                    _avatarInfoLabel.EnableInClassList("dennoko-status--warning", true);
                 }
+                _avatarInfoLabel.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _avatarInfoLabel.style.display = DisplayStyle.None;
             }
 
-            // Action buttons
-            GUILayout.BeginHorizontal();
-            using (new EditorGUI.DisabledGroupScope(!CanSetupAvatar()))
-            {
-                if (GUILayout.Button("Setup", BoneRendererTheme.ActionButtonStyle))
-                    SetupAvatar();
-            }
-            using (new EditorGUI.DisabledGroupScope(!HasBoneRenderer(_avatar)))
-            {
-                if (GUILayout.Button("Remove", BoneRendererTheme.ActionButtonStyle))
-                    RemoveRenderer(_avatar);
-            }
-            GUILayout.EndHorizontal();
+            _avatarSetupButton.SetEnabled(CanSetupAvatar());
+            _avatarRemoveButton.SetEnabled(HasBoneRenderer(_avatar));
         }
 
-        private void DrawOutfitContent()
+        /// <summary>OUTFIT カードの情報表示・ボタン活性状態を現在の _outfit / _avatar に合わせて更新する。</summary>
+        private void RefreshOutfitUI()
         {
-            // ObjectField + Clear
-            GUILayout.BeginHorizontal();
-            EditorGUI.BeginChangeCheck();
-            var newOutfit = (GameObject)EditorGUILayout.ObjectField(_outfit, typeof(GameObject), true);
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (_outfit != null && newOutfit != _outfit)
-                    RemoveRenderer(_outfit);
-                _outfit = newOutfit;
-                if (_outfit != null && CanSetupOutfit())
-                    SetupOutfit();
-            }
-            if (GUILayout.Button("Clear", BoneRendererTheme.MiniButtonStyle, GUILayout.Width(50)))
-            {
-                if (_outfit != null) RemoveRenderer(_outfit);
-                _outfit = null;
-            }
-            GUILayout.EndHorizontal();
+            if (_outfitInfoLabel == null) return;
 
-            // Info / Warning
             if (_outfit != null)
             {
-                var smrCount   = _outfit.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length;
+                var smrCount = _outfit.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length;
                 var hasArmature = HasArmature(_outfit);
-                GUILayout.Box(
-                    $"SkinnedMeshRenderer: {smrCount}  |  Armature: {(hasArmature ? "検出" : "未検出")}",
-                    BoneRendererTheme.StatusInfoStyle, GUILayout.ExpandWidth(true));
+                _outfitInfoLabel.text = $"SkinnedMeshRenderer: {smrCount}  |  Armature: {(hasArmature ? "検出" : "未検出")}";
+                _outfitInfoLabel.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _outfitInfoLabel.style.display = DisplayStyle.None;
             }
 
-            if (_outfit != null && _avatar == null)
+            _outfitWarningLabel.style.display =
+                (_outfit != null && _avatar == null) ? DisplayStyle.Flex : DisplayStyle.None;
+
+            _outfitSetupButton.SetEnabled(CanSetupOutfit());
+            _outfitRemoveButton.SetEnabled(HasBoneRenderer(_outfit));
+        }
+
+#if HAS_ANIMATION_RIGGING
+        // ─── アドオンカード (動的生成) ────────────────────────────────────
+        // カードの外枠は UI Toolkit (USS) で装飾し、アドオン自身の中身は
+        // 既存の IAddonFeature.OnGUI (IMGUI) をそのまま IMGUIContainer でホストする。
+
+        private void BuildAddonCards(VisualElement container)
+        {
+            container.Clear();
+            _addonContainers.Clear();
+
+            foreach (var addon in _addons)
             {
-                GUILayout.Box("セットアップにはアバターの参照が必要です",
-                    BoneRendererTheme.StatusWarningStyle, GUILayout.ExpandWidth(true));
+                var captured = addon;
+
+                var card = new VisualElement();
+                card.AddToClassList("dennoko-card");
+
+                var titleLabel = new Label(captured.DisplayName.ToUpper());
+                titleLabel.AddToClassList("dennoko-section-title");
+                titleLabel.AddToClassList("dennoko-card-header");
+                card.Add(titleLabel);
+
+                var imguiContainer = new IMGUIContainer(() =>
+                {
+                    ApplyAddonLightThemeFix();
+                    try
+                    {
+                        captured.OnGUI(_avatar, _outfit);
+                    }
+                    finally
+                    {
+                        RestoreAddonLightThemeFix();
+                    }
+                });
+                card.Add(imguiContainer);
+                _addonContainers.Add(imguiContainer);
+
+                container.Add(card);
             }
-
-            // Action buttons
-            GUILayout.BeginHorizontal();
-            using (new EditorGUI.DisabledGroupScope(!CanSetupOutfit()))
-            {
-                if (GUILayout.Button("Setup", BoneRendererTheme.ActionButtonStyle))
-                    SetupOutfit();
-            }
-            using (new EditorGUI.DisabledGroupScope(!HasBoneRenderer(_outfit)))
-            {
-                if (GUILayout.Button("Remove", BoneRendererTheme.ActionButtonStyle))
-                    RemoveRenderer(_outfit);
-            }
-            GUILayout.EndHorizontal();
         }
 
-        private void DrawUtilityContent()
+        // ─── アドオン (IMGUI) 用の Light テーマ文字色フィックス ───────────
+        // IAddonFeature.OnGUI は素の EditorGUILayout / EditorStyles を使うため、
+        // テーマ USS の対象外になる。Personal Light テーマだと暗いカード上に
+        // 黒文字が乗って読めなくなるため、描画直前だけ文字色を差し替える。
+
+        private static bool _addonThemeOverrideActive;
+        private static Color _addonBackupLabel, _addonBackupBoldLabel, _addonBackupToggle, _addonBackupOnToggle, _addonBackupHelpBox;
+
+        private static void ApplyAddonLightThemeFix()
         {
-            if (GUILayout.Button("シーンからアバターを検索", BoneRendererTheme.SecondaryButtonStyle))
-                SearchAvatarInScene();
+            if (EditorGUIUtility.isProSkin) return;
+            _addonThemeOverrideActive = true;
+
+            _addonBackupLabel = EditorStyles.label.normal.textColor;
+            _addonBackupBoldLabel = EditorStyles.boldLabel.normal.textColor;
+            _addonBackupToggle = EditorStyles.toggle.normal.textColor;
+            _addonBackupOnToggle = EditorStyles.toggle.onNormal.textColor;
+            _addonBackupHelpBox = EditorStyles.helpBox.normal.textColor;
+
+            var textColor = new Color(0.8f, 0.8f, 0.8f); // --dennoko-text-secondary 相当
+            EditorStyles.label.normal.textColor = textColor;
+            EditorStyles.boldLabel.normal.textColor = textColor;
+            EditorStyles.toggle.normal.textColor = textColor;
+            EditorStyles.toggle.onNormal.textColor = textColor;
+            EditorStyles.helpBox.normal.textColor = textColor;
         }
 
-        // ─── Status Bar ──────────────────────────────────────────────────────
-
-        private void DrawStatusBar()
+        private static void RestoreAddonLightThemeFix()
         {
-            GUILayout.Box(_statusMessage, GetStatusStyle(_statusType), GUILayout.ExpandWidth(true));
+            if (!_addonThemeOverrideActive) return;
+            _addonThemeOverrideActive = false;
+
+            EditorStyles.label.normal.textColor = _addonBackupLabel;
+            EditorStyles.boldLabel.normal.textColor = _addonBackupBoldLabel;
+            EditorStyles.toggle.normal.textColor = _addonBackupToggle;
+            EditorStyles.toggle.onNormal.textColor = _addonBackupOnToggle;
+            EditorStyles.helpBox.normal.textColor = _addonBackupHelpBox;
         }
-
-        private GUIStyle GetStatusStyle(StatusType type) => type switch
+#else
+        private void InitializeInstallGuide(VisualElement root)
         {
-            StatusType.Success => BoneRendererTheme.StatusSuccessStyle,
-            StatusType.Error   => BoneRendererTheme.StatusErrorStyle,
-            StatusType.Warning => BoneRendererTheme.StatusWarningStyle,
-            _                  => BoneRendererTheme.StatusInfoStyle,
-        };
-
-        // ─── Layout Helpers ──────────────────────────────────────────────────
-
-        private void DrawSection(string title, System.Action content)
-        {
-            GUILayout.BeginVertical(BoneRendererTheme.CardStyle);
-            GUILayout.Label(title, BoneRendererTheme.SectionHeaderStyle);
-            DrawSeparator();
-            content?.Invoke();
-            GUILayout.EndVertical();
-        }
-
-        private void DrawSeparator()
-        {
-            var rect = GUILayoutUtility.GetRect(0, 1, GUILayout.ExpandWidth(true));
-            EditorGUI.DrawRect(rect, BoneRendererTheme.Outline);
-            EditorGUILayout.Space(4);
-        }
-
-        // ─── Status Helper ───────────────────────────────────────────────────
-
-        public void SetStatus(string message, StatusType type, double autoResetSeconds = 4.0)
-        {
-            _statusMessage   = message;
-            _statusType      = type;
-            _statusResetTime = type == StatusType.Info
-                ? -1.0
-                : EditorApplication.timeSinceStartup + autoResetSeconds;
-            Repaint();
-        }
-
-        // ─── Install Guide (no Animation Rigging) ────────────────────────────
-
-#if !HAS_ANIMATION_RIGGING
-        private void DrawInstallGuide()
-        {
-            EditorGUILayout.Space(6);
-            GUILayout.BeginHorizontal();
-            GUILayout.Space(8);
-            GUILayout.Label("Bone Renderer Setup", BoneRendererTheme.TitleStyle);
-            GUILayout.FlexibleSpace();
-            GUILayout.Space(8);
-            GUILayout.EndHorizontal();
-            EditorGUILayout.Space(4);
-            DrawSeparator();
-
-            DrawSection("SETUP REQUIRED", () =>
-            {
-                GUILayout.Box(
-                    "このツールを使用するには Unity 公式の [Animation Rigging] パッケージが必要です。\n" +
-                    "現在はインストールされていないため、機能が無効化されています。",
-                    BoneRendererTheme.StatusErrorStyle, GUILayout.ExpandWidth(true));
-                EditorGUILayout.Space(4);
-                if (GUILayout.Button("Package Manager を開く", BoneRendererTheme.ActionButtonStyle))
-                    UnityEditor.PackageManager.UI.Window.Open("com.unity.animation.rigging");
-            });
-
-            DrawSection("インストール手順", () =>
-            {
-                GUILayout.Box(
-                    "1. 上のボタンをクリックして Package Manager を開く\n" +
-                    "2. 左上のプルダウンから [Unity Registry] を選択\n" +
-                    "3. リストから [Animation Rigging] を探して [Install] をクリック",
-                    BoneRendererTheme.StatusInfoStyle, GUILayout.ExpandWidth(true));
-            });
+            root.Q<Button>("open-package-manager-button").clicked +=
+                () => UnityEditor.PackageManager.UI.Window.Open("com.unity.animation.rigging");
         }
 #endif
+
+        // ─── ステータスバー ─────────────────────────────────────────────────
+
+        /// <summary>ステータスを表示する。Info 以外は autoResetSeconds 後に Ready へ自動復帰。</summary>
+        public void SetStatus(string message, StatusType type, double autoResetSeconds = 4.0)
+        {
+            if (_statusLabel == null) return; // UXML ロード失敗時・要素名変更時の NRE 防止
+
+            _statusLabel.text = message;
+            _statusLabel.EnableInClassList("dennoko-status--success", type == StatusType.Success);
+            _statusLabel.EnableInClassList("dennoko-status--error", type == StatusType.Error);
+            _statusLabel.EnableInClassList("dennoko-status--warning", type == StatusType.Warning);
+
+            _statusResetSchedule?.Pause();
+            if (type != StatusType.Info)
+            {
+                _statusResetSchedule = _statusLabel.schedule
+                    .Execute(() => SetStatus("Ready", StatusType.Info))
+                    .StartingIn((long)(autoResetSeconds * 1000));
+            }
+        }
     }
 }

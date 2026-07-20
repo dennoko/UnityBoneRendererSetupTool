@@ -1,0 +1,56 @@
+/* ============================================================
+   BoneRendererSetupWindow.uss
+   このツール固有の UI クラス定義。
+   汎用テーマは DennokoBoneRendererSetupToolTheme.uss に置き、ここにはプロジェクト固有の
+   レイアウト・バリアントのみを追加する（テーマ差し替えを容易にするため）。
+   カラーは DennokoBoneRendererSetupToolTheme.uss の USS 変数を経由すること。
+   ============================================================ */
+
+/* ステータス表示バリアント (warning。success / error はテーマ側に定義済み) */
+.dennoko-root .dennoko-status--warning {
+    background-color: rgba(255, 183, 77, 0.2);
+    color: var(--dennoko-semantic-warning);
+}
+
+/* 折り返しテキスト (複数行の説明文など) */
+.dennoko-root .dennoko-wrap {
+    white-space: normal;
+}
+
+/* 横並び行 (ObjectField + Clear ボタン、Setup + Remove ボタン等) */
+.dennoko-root .dennoko-hrow {
+    flex-direction: row;
+    align-items: center;
+}
+
+/* 横並び行内で伸縮する入力欄 (ObjectField 等)。
+   flex-grow だけでは足りない — grow は「余った空間を分配する」だけで、
+   足りない空間を詰める (= 縮む) 側は flex-shrink が担当する。
+   両方を揃えないと、隣の固定幅ボタン (Clear 等) がカード外へ押し出される。
+   overflow: hidden も付けて、縮んだ後に中身が枠外へはみ出さないようにする。 */
+.dennoko-root .dennoko-hrow > .dennoko-col-grow {
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+}
+
+/* 横並び行内でボタンを均等に伸縮させる (Setup / Remove 等)。
+   複数ボタンを均等割りする場合も grow と shrink は必ずセットで指定する。 */
+.dennoko-root .dennoko-hrow > .unity-button.dennoko-flex-button {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+/* ObjectField 横の小さな Clear ボタン */
+.dennoko-root .dennoko-clear-button {
+    width: 50px;
+    flex-shrink: 0;
+}
+
+/* ウィンドウ縮小時に固定クロームが潰れないようにする */
+.dennoko-root .dennoko-header,
+.dennoko-root .dennoko-separator,
+.dennoko-root .dennoko-status,
+.dennoko-root .dennoko-card {
+    flex-shrink: 0;
+}

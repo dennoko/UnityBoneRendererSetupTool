@@ -168,6 +168,10 @@ namespace Hays.BoneRendererSetup.UI
 
             if (CanSetupAvatar())
                 SetupAvatar();
+
+            _avatarField?.SetValueWithoutNotify(_avatar);
+            RefreshAvatarUI();
+            RefreshOutfitUI();
         }
 
         private void MarkSceneDirty()

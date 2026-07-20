@@ -1,0 +1,77 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+
+    <!-- ヘッダー -->
+    <ui:VisualElement class="dennoko-header">
+        <ui:Label text="Bone Renderer Setup" class="dennoko-title" />
+    </ui:VisualElement>
+    <ui:VisualElement class="dennoko-separator" />
+
+    <!-- インストールガイド (Animation Rigging 未インストール時のみ表示) -->
+    <ui:VisualElement name="install-guide-root">
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="SETUP REQUIRED" class="dennoko-section-title dennoko-card-header" />
+            <ui:Label text="このツールを使用するには Unity 公式の [Animation Rigging] パッケージが必要です。&#10;現在はインストールされていないため、機能が無効化されています。"
+                class="dennoko-text-error dennoko-wrap" />
+            <ui:Button name="open-package-manager-button" text="Package Manager を開く" class="dennoko-button-primary" />
+        </ui:VisualElement>
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="インストール手順" class="dennoko-section-title dennoko-card-header" />
+            <ui:Label text="1. 上のボタンをクリックして Package Manager を開く&#10;2. 左上のプルダウンから [Unity Registry] を選択&#10;3. リストから [Animation Rigging] を探して [Install] をクリック"
+                class="dennoko-wrap" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+
+    <!-- 設定エリア (スクロール可能)。ウィンドウ縮小時はここだけが縮む -->
+    <ui:ScrollView name="main-scroll" class="dennoko-scroll">
+
+        <!-- UTILITY -->
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="ユーティリティ" class="dennoko-section-title dennoko-card-header" />
+            <ui:Button name="search-avatar-button" text="シーンからアバターを検索" class="dennoko-button-secondary" />
+        </ui:VisualElement>
+
+        <!-- AVATAR -->
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="アバター" class="dennoko-section-title dennoko-card-header" />
+            <ui:VisualElement class="dennoko-hrow">
+                <uie:ObjectField name="avatar-field" type="UnityEngine.GameObject, UnityEngine.CoreModule" class="dennoko-col-grow" />
+                <ui:Button name="avatar-clear-button" text="Clear" class="dennoko-button-secondary dennoko-clear-button" />
+            </ui:VisualElement>
+            <ui:Label name="avatar-info-label" class="dennoko-status dennoko-wrap" style="display: none;" />
+            <ui:VisualElement class="dennoko-hrow">
+                <ui:Button name="avatar-setup-button" text="Setup" class="dennoko-button-primary dennoko-flex-button" />
+                <ui:Button name="avatar-remove-button" text="Remove" class="dennoko-button-primary dennoko-flex-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- OUTFIT -->
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="衣装" class="dennoko-section-title dennoko-card-header" />
+            <ui:VisualElement class="dennoko-hrow">
+                <uie:ObjectField name="outfit-field" type="UnityEngine.GameObject, UnityEngine.CoreModule" class="dennoko-col-grow" />
+                <ui:Button name="outfit-clear-button" text="Clear" class="dennoko-button-secondary dennoko-clear-button" />
+            </ui:VisualElement>
+            <ui:Label name="outfit-info-label" class="dennoko-status dennoko-wrap" style="display: none;" />
+            <ui:Label name="outfit-warning-label" text="セットアップにはアバターの参照が必要です" class="dennoko-status dennoko-status--warning dennoko-wrap" style="display: none;" />
+            <ui:VisualElement class="dennoko-hrow">
+                <ui:Button name="outfit-setup-button" text="Setup" class="dennoko-button-primary dennoko-flex-button" />
+                <ui:Button name="outfit-remove-button" text="Remove" class="dennoko-button-primary dennoko-flex-button" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- アドオン (動的に生成される。IAddonFeature 実装ごとに 1 カード) -->
+        <ui:VisualElement name="addon-container" />
+
+        <!-- COLOR SETTINGS -->
+        <ui:VisualElement class="dennoko-card">
+            <ui:Label text="カラー設定" class="dennoko-section-title dennoko-card-header" />
+            <uie:ColorField label="Avatar Color" name="avatar-color-field" />
+            <uie:ColorField label="Outfit Color" name="outfit-color-field" />
+        </ui:VisualElement>
+
+    </ui:ScrollView>
+
+    <!-- ステータスバー -->
+    <ui:Label name="status-label" text="Ready" class="dennoko-status" />
+
+</ui:UXML>
