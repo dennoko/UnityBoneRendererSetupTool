@@ -46,33 +46,6 @@ namespace Hays.BoneRendererSetup.UI
         private Button _outfitSetupButton;
         private Button _outfitRemoveButton;
 
-        // ─── 標準フォント: OS のメイリオ ─────────────────────────────────
-        // フォントアセットを同梱せず、端末インストール済みのメイリオを動的参照する。
-        // レガシー Font (Font.CreateDynamicFontFromOSFont) を FontDefinition.FromFont() で
-        // 渡すとグリフ生成に失敗し文字が一切表示されなくなるため、OS フォントから直接
-        // SDF FontAsset を生成すること。未搭載環境では null を返しエディタ標準フォントにフォールバックする。
-        private const string UiFontFamily = "Meiryo";
-        private static UnityEngine.TextCore.Text.FontAsset _uiFontAsset;
-        private static bool _uiFontSearched;
-
-        private static UnityEngine.TextCore.Text.FontAsset GetUIFontAsset()
-        {
-            if (_uiFontSearched) return _uiFontAsset;
-            _uiFontSearched = true;
-
-            try
-            {
-                _uiFontAsset = UnityEngine.TextCore.Text.FontAsset.CreateFontAsset(UiFontFamily, "Regular");
-                if (_uiFontAsset != null)
-                    _uiFontAsset.hideFlags = HideFlags.HideAndDontSave;
-            }
-            catch
-            {
-                _uiFontAsset = null;
-            }
-            return _uiFontAsset;
-        }
-
         // ─── Window Registration ─────────────────────────────────────────────
 
         [MenuItem("dennokoworks/BoneRendererSetupTool")]
@@ -147,9 +120,10 @@ namespace Hays.BoneRendererSetup.UI
             root.style.backgroundColor = (Color)new Color32(0x12, 0x12, 0x12, 0xFF);
             root.style.flexGrow = 1;
 
-            var uiFontAsset = GetUIFontAsset();
-            if (uiFontAsset != null)
-                root.style.unityFontDefinition = FontDefinition.FromSDFFont(uiFontAsset);
+            // 標準フォント: OS のメイリオを全体に適用（全テキスト要素へ継承される）。
+            // 生成・アトラス保護・キャッシュ消失時の再適用はすべて DennokoUIFont が行う。
+            // ⚠ ここで FontAsset を直接生成しないこと（DennokoUIFont.cs のコメント参照）。
+            DennokoUIFont.Apply(root);
 
             LoadStyleSheet(root, ThemeUssGuid);
             LoadStyleSheet(root, WindowUssGuid);
