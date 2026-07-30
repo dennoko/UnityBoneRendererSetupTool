@@ -31,7 +31,8 @@ namespace Hays.BoneRendererSetup.Addons
             Transform avatarBone,
             List<OutfitBoneMapper.MatchResult> matches)
         {
-            FindMatchedChild(outfitBone, matches, out var outfitChild, out var avatarChild);
+            BoneRotationAligner.FindMatchedChild(
+                outfitBone, matches, out var outfitChild, out var avatarChild);
             if (outfitChild == null || avatarChild == null) return;
 
             var outfitVec = outfitChild.position - outfitBone.position;
@@ -42,9 +43,13 @@ namespace Hays.BoneRendererSetup.Addons
             // 直線上にない子ボーン（分岐ボーン）は無視
             if (Vector3.Angle(outfitVec, avatarVec) >= CollinearAngleThreshold) return;
 
-            // 親ボーンのローカル空間で子の位置を取得し、軸ごとにスケールを計算
+            // 衣装ボーンのローカル空間で「現在の子の位置」と「目標（アバターの子）の位置」を取得し、
+            // 軸ごとにスケールを計算する。
+            // アバター側も衣装ボーンの空間へ変換するのが重要: 回転合わせで 3 軸は平行になっているが、
+            // 軸の並び（どの軸が骨方向か）は入れ替わりうるため、アバターボーンの空間で成分を取ると
+            // 別の軸の成分同士を比較してしまう。同じ空間へ揃えることで規約差もスケール差も吸収する。
             Vector3 outfitLocal = outfitBone.InverseTransformPoint(outfitChild.position);
-            Vector3 avatarLocal = avatarBone.InverseTransformPoint(avatarChild.position);
+            Vector3 avatarLocal = outfitBone.InverseTransformPoint(avatarChild.position);
             Vector3 scale = ComputePerAxisScale(outfitLocal, avatarLocal);
 
             var maType = GetMAType();
@@ -118,25 +123,5 @@ namespace Hays.BoneRendererSetup.Addons
             so.ApplyModifiedProperties();
         }
 
-        private static void FindMatchedChild(
-            Transform parent,
-            List<OutfitBoneMapper.MatchResult> matches,
-            out Transform outfitChild,
-            out Transform avatarChild)
-        {
-            outfitChild = null;
-            avatarChild = null;
-
-            foreach (Transform child in parent)
-            {
-                var m = matches.FirstOrDefault(r => r.OutfitBone == child);
-                if (m.OutfitBone != null && m.AvatarBone != null)
-                {
-                    outfitChild = m.OutfitBone;
-                    avatarChild = m.AvatarBone;
-                    return;
-                }
-            }
-        }
     }
 }
